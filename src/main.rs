@@ -1,26 +1,25 @@
-use nix::sched::{unshare, CloneFlags};
-use nix::unistd::{fork, ForkResult};
+use std::env;
 use std::process::Command;
+use nix::unistd::{chroot, fork, ForkResult};
 
 fn main() {
-    println!("==> Unshare namespaces (UTS + PID)");
-
-    unshare(CloneFlags::CLONE_NEWUTS | CloneFlags::CLONE_NEWPID)
-        .expect("Failed to unshare namespaces");
-
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            println!("==> In child process. Launching bash...");
-            Command::new("/bin/bash")
+            println!("==> [Child] Switching root...");
+
+            chroot("/tmp/rootfs").expect("chroot failed");
+            env::set_current_dir("/").expect("chdir failed");
+
+            println!("==> [Child] Launching /bin/sh in chroot");
+            Command::new("/bin/sh")
                 .status()
-                .expect("Failed to exec bash");
+                .expect("failed to exec /bin/sh");
         }
         Ok(ForkResult::Parent { child }) => {
-            println!("==> Parent process, child pid: {}", child);
+            println!("==> [Parent] Container launched with PID {}", child);
         }
         Err(e) => {
             eprintln!("Fork failed: {}", e);
         }
     }
 }
-
